@@ -6,12 +6,12 @@ import requests
 import traceback
 from ttictoc import tic, toc
 
+# https://www.blockpalettes.com/palettes
 # https://www.geeksforgeeks.org/python-web-scraping-tutorial/
 
-# print(soup.prettify())
 
 df = pd.DataFrame(columns= ['palette_number', 'page_number', 'likes', 'date_posted', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6'])
-start_index = 1; end_index = 30
+start_index = 1; end_index = 545
 
 failed_queries = []
 
