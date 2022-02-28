@@ -1,55 +1,58 @@
+from bs4 import BeautifulSoup
+from datetime import datetime
+import pandas as pd
 import re
 import requests
-import pandas as pd
+import traceback
 from ttictoc import tic, toc
-from bs4 import BeautifulSoup
 
 # https://www.geeksforgeeks.org/python-web-scraping-tutorial/
 
 # print(soup.prettify())
 
-df = pd.DataFrame(columns= ['palette_number', 'likes', 'date_posted', 'username', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6'])
-start_index = 1; end_index = 23270
+df = pd.DataFrame(columns= ['palette_number', 'page_number', 'likes', 'date_posted', 'block1', 'block2', 'block3', 'block4', 'block5', 'block6'])
+start_index = 1; end_index = 30
 
 failed_queries = []
 
 tic()
-for palette_number in range(start_index, end_index + 1, 100):
-    try: 
-        # pull page
-        r = requests.get(f'https://www.blockpalettes.com/palette/{palette_number}')
-        soup = BeautifulSoup(r.content, 'html.parser')
+for page_number in range(start_index, end_index + 1):
+    # pull page
+    r = requests.get(f'https://www.blockpalettes.com/palettes?p={page_number}')
+    soup = BeautifulSoup(r.content, 'html.parser')
+    # print(soup.prettify())
+    # scrape for palette-float thumbnails, then iterate
+    palette_list = soup.find('div', class_='palettes').find_all('div', class_='palette-float')
 
-        # scrape blocks
-        s = soup.find('div', class_='blocks')
-        lines = s.find_all('img')
-        block_ids = [re.search('(?<=block\/).*(?=.png)', x['src']).group() for x in lines]
+    for palette in palette_list:
+        try: 
+            palette_number = re.search('(?<=palette\/).*', palette.findChildren("a" , recursive=False)[0].get('href')).group().strip()
+            blocks = palette.find_all('img', class_='block')
+            block_ids = [re.search('(?<=block\/).*(?=.png)', x['src']).group() for x in blocks]
+            likes = palette.find('div', class_='time left half').text.strip()
+            try: date_posted = palette.find('div', class_='time right half').text.strip()
+            except: date_posted = 'Staff Pick'
 
-        # scrape palette#, likes, date_posted, username
-        likes = soup.find('span', class_='likes_count').text.strip()
-        date_posted = soup.find('div', class_='time').text.strip()
-        try: username = soup.find('a', class_='userLink').text.strip()[:-5]
-        except: username = ""
+            # add to df
+            df.loc[len(df.index)] = [palette_number, page_number, likes, date_posted] + block_ids
 
-        # add to df
-        df.loc[len(df.index)] = [palette_number, likes, date_posted, username] + block_ids
-
-        if palette_number % 1000 == 1:
-            df.to_csv('medfile.csv')
-    except Exception as e:
-        print(f'palette_number:{palette_number}', e)
-        failed_queries.append(str(palette_number))
+        except Exception:
+            print(f'Page {page_number}:', traceback.format_exc())
+            print(palette)
+            print(palette.findChildren("a" , recursive=False))
+            failed_queries.append(str(page_number))
 
 # output to console
-print(len(df), 'queries')
+print(end_index - start_index + 1, 'queries')
 print(round(toc(), 1), 'seconds')
+print(len(failed_queries), 'errors')
 print()
 print(df)
 
 # write to files
-df.to_csv('medfile.csv')
-with open('failed-queries.txt', 'w') as f:
-    f.write(''.join(failed_queries))
-
-# 23270 palettes total
-# 100 queries, 59.5 seconds - 13938 seconds total query, less than 4 hours
+df.to_csv('palettes.csv')
+with open('metadata.txt', 'w') as f:
+    f.write(f'''last_updated: {datetime.now().strftime("%d/%m/%Y %H:%M:%S")},
+    start_index: {start_index},
+    end_index: {end_index},
+    failed_queries: ''' + ''.join(failed_queries))
